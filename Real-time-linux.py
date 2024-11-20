@@ -40,9 +40,8 @@ cx = intrinsics.ppx
 cy = intrinsics.ppy
 
 # Modelos YOLO
-#best_weights = r"C:\Users\fsbfe\runs\detect\train4\weights\best.pt"
-model_mybox = YOLO(r"/Users/fsbfe/runs/detect/train4/weights/best.pt")  # Atualize o caminho
-model_generic = YOLO('yolov8s')  # YOLO genérico pré-treinado
+model_mybox = YOLO(r"/Users/fsbfe/runs/detect/train4/weights/best.pt")  # Modelo MyBox Fernando
+model_generic = YOLO('yolov8s')                                         # Modelo de validação cruzada
 
 # Variável para controlar a detecção de MyBox
 mybox_detected = False
