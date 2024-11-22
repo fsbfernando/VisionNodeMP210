@@ -6,5 +6,7 @@ x-y-z-real-time: Código que obtém as coordenadas da caixa em relação a câme
 
 Real-time-linux: Adaptação de x-y-z-real-time para poder funcionar no linux.
 
-train5: referente a pasta com os arquivos obtidos no treinamento da rede neural. Contém pesos e gráficos gerados.
+train5: Contém pesos e gráficos gerados pela RN para reconhecer MyBox (Caixa Organizadora para Escritório).
+
+train6: Contém pesos e gráficos gerados pela RN para reconhecer FakeOverheadBin (Armário)
 
