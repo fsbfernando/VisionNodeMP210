@@ -1,0 +1,214 @@
+CODIGO ADAPTADO
+
+import os
+import cv2
+import numpy as np
+import pyrealsense2 as rs
+from ultralytics import YOLO
+import time
+import math
+
+# Importar biblioteca específica para comunicação com o KUKA IIWA
+# Isso dependerá de como você está se comunicando com o robô
+# Exemplo com ROS:
+# import rospy
+# from iiwa_msgs.msg import JointPosition
+# from geometry_msgs.msg import Pose
+
+# Função IOU para calcular a interseção sobre união
+def iou(box1, box2):
+    x_left = max(box1[0], box2[0])
+    y_top = max(box1[1], box2[1])
+    x_right = min(box1[2], box2[2])
+    y_bottom = min(box1[3], box2[3])
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    union_area = box1_area + box2_area - intersection_area
+
+    return intersection_area / union_area
+
+# Função para obter a pose atual do robô
+def get_robot_pose():
+    # Implementar a obtenção da pose do robô
+    # Isso pode variar dependendo da API utilizada
+    # Exemplo com ROS:
+    # pose = Pose()
+    # rospy.wait_for_message("/iiwa/pose", Pose, timeout=5)
+    # return pose
+    pass
+
+# Função para converter a pose do robô para uma matriz de transformação
+def pose_to_transformation_matrix(pose):
+    # Converter posição e orientação (quaternion) para matriz 4x4
+    # Implementar conforme a estrutura da pose recebida
+    # Exemplo:
+    # translation = np.array([pose.position.x, pose.position.y, pose.position.z])
+    # rotation = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+    # rot_matrix = quaternion_to_rotation_matrix(rotation)
+    # transformation = np.eye(4)
+    # transformation[:3, :3] = rot_matrix
+    # transformation[:3, 3] = translation
+    # return transformation
+    pass
+
+# Função para converter quaternion para matriz de rotação
+def quaternion_to_rotation_matrix(q):
+    x, y, z, w = q
+    rot_matrix = np.array([
+        [1 - 2*(y**2 + z**2),     2*(x*y - z*w),         2*(x*z + y*w)],
+        [2*(x*y + z*w),           1 - 2*(x**2 + z**2),   2*(y*z - x*w)],
+        [2*(x*z - y*w),           2*(y*z + x*w),         1 - 2*(x**2 + y**2)]
+    ])
+    return rot_matrix
+
+# Definir a transformação fixa da câmera em relação à flange do robô
+# Esta matriz deve ser obtida através de calibração
+# Exemplo (identidade, a ser substituída pela real)
+camera_to_flange = np.eye(4)
+# Exemplo de transformação (substitua com os valores reais)
+# camera_to_flange[:3, :3] = quaternion_to_rotation_matrix([0, 0, 0, 1])  # Sem rotação
+# camera_to_flange[:3, 3] = np.array([0.1, 0, 0.2])  # Translação em metros
+
+# Configuração da câmera RealSense
+pipeline = rs.pipeline()
+config = rs.config()
+config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+
+try:
+    # Iniciar o pipeline
+    profile = pipeline.start(config)
+
+    # Obter os parâmetros intrínsecos da câmera
+    sensor_de_profundidade = profile.get_device().first_depth_sensor()
+    escala_de_profundidade = sensor_de_profundidade.get_depth_scale()
+    intrínsecos = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+    fx, fy, cx, cy = intrínsecos.fx, intrínsecos.fy, intrínsecos.ppx, intrínsecos.ppy
+
+    # Configurar os modelos YOLO
+    model_weights = "/home/iafa/runs/detect/train9/weights/best.pt"
+    model = YOLO(model_weights)  # Certifique-se de que o modelo está treinado corretamente
+
+    # Modelo treinado para FakeOverheadBin e OverheadBin
+    print("Iniciando detecção em tempo real. Pressione 'Q' para sair.")
+    last_output = None  # Armazena os últimos parâmetros exibidos no terminal
+
+    # Crie uma única janela para exibir a câmera
+    cv2.namedWindow("Detecção em Tempo Real", cv2.WINDOW_NORMAL)
+
+    while True:
+        # Capturar frames da câmera com timeout de 10 segundos
+        frames = pipeline.wait_for_frames(timeout_ms=10000)
+        color_frame = frames.get_color_frame()
+        depth_frame = frames.get_depth_frame()
+
+        # Verifique se os quadros são válidos
+        if not color_frame or not depth_frame:
+            continue
+
+        # Converter quadros para arrays numpy
+        frame = np.asanyarray(color_frame.get_data())
+        profundidade_image = np.asanyarray(depth_frame.get_data())
+
+        # Realizar detecção com o modelo treinado
+        results = model.predict(frame, verbose=False)
+
+        # Obter a pose atual do robô
+        robot_pose = get_robot_pose()
+        if robot_pose is None:
+            print("Não foi possível obter a pose do robô.")
+            continue
+
+        # Converter a pose do robô para uma matriz de transformação
+        robot_to_base = pose_to_transformation_matrix(robot_pose)
+
+        # Calcular a transformação da câmera em relação à base do robô
+        camera_to_base = robot_to_base @ camera_to_flange
+
+        # Processar as detecções do modelo
+        for result in results:
+            for box in result.boxes:
+                x_min, y_min, x_max, y_max = map(int, box.xyxy[0])
+                class_id = int(box.cls[0])
+                confidence = box.conf[0]
+                class_name = model.names[class_id]
+
+                # Verificar se é OverheadBin e validar com FakeOverheadBin
+                if class_name == "OverheadBin":
+                    # Verificar se há alta confiança em FakeOverheadBin
+                    fake_bin_confidence = max(
+                        box.conf for box in result.boxes if model.names[int(box.cls[0])] == "FakeOverheadBin"
+                    ) if any(model.names[int(box.cls[0])] == "FakeOverheadBin" for box in result.boxes) else 0
+
+                    # Descartar se FakeOverheadBin tiver alta confiança
+                    if fake_bin_confidence > 0.85:
+                        continue
+
+                    # Coordenadas do centro da caixa delimitadora
+                    x_center = int((x_min + x_max) / 2)
+                    y_center = int((y_min + y_max) / 2)
+
+                    # Obter a distância do pixel central
+                    distance = depth_frame.get_distance(x_center, y_center) * escala_de_profundidade  # Em metros
+
+                    # Converter coordenadas de pixels para coordenadas reais na câmera
+                    X_real = (x_center - cx) * distance / fx
+                    Y_real = (y_center - cy) * distance / fy
+                    Z_real = distance  # Usando o valor de distância como Z
+
+                    # Coordenadas do objeto no sistema da câmera (homogêneas)
+                    object_camera = np.array([X_real, Y_real, Z_real, 1]).reshape((4, 1))
+
+                    # Transformar para o sistema da base do robô
+                    object_base = camera_to_base @ object_camera
+                    X_base, Y_base, Z_base, _ = object_base.flatten()
+
+                    # Verificação de repetição com tolerância de 5%
+                    current_output = (X_base, Y_base, Z_base)
+                    if last_output is not None:
+                        same_as_last = (
+                            np.isclose(current_output[0], last_output[0], rtol=0.05) and
+                            np.isclose(current_output[1], last_output[1], rtol=0.05) and
+                            np.isclose(current_output[2], last_output[2], rtol=0.05)
+                        )
+                    else:
+                        same_as_last = False
+
+                    # Só imprime se os parâmetros atuais são diferentes dentro da tolerância
+                    if not same_as_last:
+                        print(f"OverheadBin detectado a {Z_base:.4f} metros da base.")
+                        print(f"Coordenadas relativas: X={X_base:.4f}, Y={Y_base:.4f}, Z={Z_base:.4f}")
+                        last_output = current_output
+
+                    # Desenhar caixa delimitadora e exibir informações
+                    cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                    cv2.putText(
+                        frame,
+                        f"OverheadBin: {confidence:.2f}",
+                        (x_min, y_min - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        2,
+                    )
+
+        # Mostrar o frame atualizado
+        cv2.imshow("Detecção em Tempo Real", frame)
+
+        # Pressione 'Q' para sair
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+except rs.error as e:
+    print(f"Erro RealSense: {e}")
+except Exception as e:
+    print(f"Erro geral: {e}")
+finally:
+    # Parar o pipeline e fechar janelas
+    pipeline.stop()
+    cv2.destroyAllWindows()
