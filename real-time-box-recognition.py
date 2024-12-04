@@ -42,7 +42,7 @@ try:
     model = YOLO(model_weights)  # Modelo treinado para FakeOverheadBin e OverheadBin
 
     print("Iniciando detecção em tempo real. Pressione 'Q' para sair.")
-    overhead_bin_detected = False  # Controle de detecção
+    last_output = None  # Armazena os últimos parâmetros exibidos no terminal
 
     # Criar uma única janela para exibir a câmera
     cv2.namedWindow("Detecção em Tempo Real", cv2.WINDOW_NORMAL)
@@ -63,8 +63,6 @@ try:
 
         # Realizar detecção com o modelo treinado
         results = model.predict(frame, verbose=False)
-
-        current_detection = False  # Controle local para esta iteração
 
         # Processar as detecções do modelo
         for result in results:
@@ -95,6 +93,24 @@ try:
                     # Convertendo coordenadas de pixels para coordenadas reais
                     X_real = (x_center - cx) * distance / fx
                     Y_real = (y_center - cy) * distance / fy
+                    Z_real = distance  # Usando o valor de distância como Z
+
+                    # Verificação de repetição com tolerância de 5%
+                    current_output = (X_real, Y_real, Z_real)
+                    if last_output is not None:
+                        same_as_last = (
+                            np.isclose(current_output[0], last_output[0], rtol=0.05) and
+                            np.isclose(current_output[1], last_output[1], rtol=0.05) and
+                            np.isclose(current_output[2], last_output[2], rtol=0.05)
+                        )
+                    else:
+                        same_as_last = False
+
+                    # Só imprime se os parâmetros atuais forem diferentes dentro da tolerância
+                    if not same_as_last:
+                        print(f"OverheadBin detectado a {distance:.4f} metros.")
+                        print(f"Coordenadas relativas: X={X_real:.4f}, Y={Y_real:.4f}, Z={distance:.4f}")
+                        last_output = current_output
 
                     # Desenhar bounding box e exibir informações
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
@@ -107,17 +123,6 @@ try:
                         (0, 255, 0),
                         2,
                     )
-
-                    current_detection = True
-                    if not overhead_bin_detected:
-                        print(f"OverheadBin detectado a {distance:.4f} metros.")
-                        print(f"Coordenadas relativas: X={X_real:.4f}, Y={Y_real:.4f}, Z={distance:.4f}")
-                        overhead_bin_detected = True
-
-        # Caso o OverheadBin não seja detectado
-        if not current_detection and overhead_bin_detected:
-            print("OverheadBin não está mais visível.")
-            overhead_bin_detected = False
 
         # Mostrar o frame atualizado apenas uma vez por ciclo
         cv2.imshow("Detecção em Tempo Real", frame)
