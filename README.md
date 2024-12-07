@@ -14,3 +14,5 @@ Real-time-box-recognition : Código de reconhecimento do bagageiro Embraer.
 
 best.pt : Pesos para reconhecimento do bagageiro Embraer (v1 - 1900 fotos)
 
+nova-versa: Versão atualizada em 7/12/2024 para reconhecimento em tempo real de bagageiro.
+
