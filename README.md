@@ -10,7 +10,7 @@ train5: Contém pesos e gráficos gerados pela RN para reconhecer MyBox (Caixa O
 
 train6: Contém pesos e gráficos gerados pela RN para reconhecer FakeOverheadBin (Armário)
 
-Real-time-box-recognition : Código de reconhecimento do bagageiro Embraer.
+Real-time-box-recognition : Código de reconhecimento do bagageiro.
 
 best.pt : Pesos para reconhecimento do bagageiro Embraer (v1 - 1900 fotos)
 
