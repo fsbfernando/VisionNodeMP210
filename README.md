@@ -12,7 +12,7 @@ train6: Contém pesos e gráficos gerados pela RN para reconhecer FakeOverheadBi
 
 Real-time-box-recognition : Código de reconhecimento do bagageiro.
 
-best.pt : Pesos para reconhecimento do bagageiro Embraer (v1 - 1900 fotos)
+best.pt : Pesos para reconhecimento do bagageiro 
 
 nova-versa: Versão atualizada em 7/12/2024 para reconhecimento em tempo real de bagageiro.
 
